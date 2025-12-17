@@ -46,49 +46,107 @@ public class DelivaryServlet extends HttpServlet {
             }
         }
 
-        // -----------------------------
-        // ② 家具番号 → 家具名
-        // -----------------------------
-        List<Map<String,String>> furnitureList = new ArrayList<>();
-        try {
-            for (String code : furnitureCodes) {
-                PreparedStatement ps = ConnectSQL.getSt("SELECT FURN_NAME FROM FURN WHERE FURN_CODE = ?");
-                ps.setString(1, code);
-                ResultSet rs = ps.executeQuery();
-                if (rs.next()) {
-                    Map<String,String> map = new HashMap<>();
-                    map.put("code", code);                     // 登録用に家具番号も保持
-                    map.put("name", rs.getString("FURN_NAME")); // 表示用
-                    furnitureList.add(map);
-                }
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+     // -----------------------------
+     // ② 家具番号 → 家具名（存在チェック付き）
+     // -----------------------------
+     List<Map<String,String>> furnitureList = new ArrayList<>();
+     List<String> errorFurniture = new ArrayList<>();
 
-        // -----------------------------
-        // ③ 郵便番号上3桁 → 業者検索
-        // -----------------------------
-        String contraCode = null;
-        String contraName = null;
+     try {
+         for (String code : furnitureCodes) {
+             PreparedStatement ps =
+                 ConnectSQL.getSt("SELECT FURN_NAME FROM FURN WHERE FURN_CODE = ?");
+             ps.setString(1, code);
+             ResultSet rs = ps.executeQuery();
 
-        String sqlContra =
-            "SELECT C.CONTRA_CODE, C.CONTRA_NAME " +
-            "FROM POSTCODE P " +
-            "JOIN CONTRA C ON P.DELAREA_CODE = C.DELAREA_CODE " +
-            "WHERE P.POST_CODE LIKE ?";
+             if (rs.next()) {
+                 Map<String,String> map = new HashMap<>();
+                 map.put("code", code);                     // 登録用
+                 map.put("name", rs.getString("FURN_NAME"));// 表示用
+                 furnitureList.add(map);
+             } else {
+                 // 家具テーブルに存在しない番号
+                 errorFurniture.add(code);
+             }
+         }
+     } catch (Exception e) {
+         e.printStackTrace();
+     }
 
-        try {
-            PreparedStatement ps = ConnectSQL.getSt(sqlContra);
-            ps.setString(1, postCode.substring(0,3) + "%");
-            ResultSet rs = ps.executeQuery();
-            if (rs.next()) {
-                contraCode = rs.getString("CONTRA_CODE");
-                contraName = rs.getString("CONTRA_NAME");
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+  // -----------------------------
+  // 家具番号エラーがあればフォームに戻す
+  // -----------------------------
+  if (!errorFurniture.isEmpty()
+      || furnitureList.size() != furnitureCount) {
+
+      request.setAttribute(
+          "errorMessage",
+          "存在しない家具番号があります： " + String.join(", ", errorFurniture)
+      );
+
+      // 入力値を戻す
+      request.setAttribute("zipcode", postCode);
+      request.setAttribute("address", address);
+      request.setAttribute("name", name);
+      request.setAttribute("tel", tel);
+      request.setAttribute("furnitureCount", furnitureCount);
+      request.setAttribute("furnitureCodes", furnitureCodes);
+
+      RequestDispatcher rd =
+          request.getRequestDispatcher("/delivaryform.jsp");
+      rd.forward(request, response);
+      return;
+  }
+
+
+//-----------------------------
+//③ 郵便番号上3桁 → 業者検索
+//-----------------------------
+String contraCode = null;
+String contraName = null;
+
+String sqlContra =
+   "SELECT C.CONTRA_CODE, C.CONTRA_NAME " +
+   "FROM POSTCODE P " +
+   "JOIN CONTRA C ON P.DELAREA_CODE = C.DELAREA_CODE " +
+   "WHERE P.POST_CODE LIKE ?";
+
+try {
+   PreparedStatement ps = ConnectSQL.getSt(sqlContra);
+   ps.setString(1, postCode.substring(0,3) + "%");
+   ResultSet rs = ps.executeQuery();
+   if (rs.next()) {
+       contraCode = rs.getString("CONTRA_CODE");
+       contraName = rs.getString("CONTRA_NAME");
+   }
+} catch (Exception e) {
+   e.printStackTrace();
+}
+
+/* ===== ここを追加 ===== */
+if (contraCode == null) {
+
+   request.setAttribute(
+       "errorMessage",
+       "この郵便番号では配達可能な業者が見つかりません。"
+   );
+
+   // 入力値を戻す
+   request.setAttribute("zipcode", postCode);
+   request.setAttribute("address", address);
+   request.setAttribute("name", name);
+   request.setAttribute("tel", tel);
+   request.setAttribute("furnitureCount", furnitureCount);
+
+   // 家具番号も戻す（重要）
+   request.setAttribute("furnitureCodes", furnitureCodes);
+
+   RequestDispatcher rd =
+       request.getRequestDispatcher("/delivaryform.jsp");
+   rd.forward(request, response);
+   return;
+}
+
 
         // -----------------------------
         // ④ 配達可能日取得
