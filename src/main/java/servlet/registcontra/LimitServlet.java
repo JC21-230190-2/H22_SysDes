@@ -3,7 +3,6 @@ package servlet.registcontra;
 import java.io.IOException;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
-import java.util.HashMap;
 import java.util.Map;
 
 import javax.servlet.ServletException;
@@ -17,102 +16,80 @@ import sql_temp.ConnectSQL;
 @WebServlet("/limit")
 public class LimitServlet extends HttpServlet {
 
+  @Override
   protected void doPost(HttpServletRequest req, HttpServletResponse res)
       throws ServletException, IOException {
 
     req.setCharacterEncoding("UTF-8");
 
-    String mode = req.getParameter("mode");
+    /* ===== パラメータ取得 ===== */
     String contraCode = req.getParameter("contraCode");
     int year = Integer.parseInt(req.getParameter("year"));
     int month = Integer.parseInt(req.getParameter("month"));
 
-    /* ===== 業者名取得 ===== */
-    String contraName = null;
-    try{
-      PreparedStatement st =
+    String ym = year + "-" + String.format("%02d", month);
+
+    try {
+      /* ===== ① 業者名取得 ===== */
+      String contraName = null;
+      PreparedStatement stName =
         ConnectSQL.getSt(
-          "SELECT CONTRA_NAME FROM CONTRAR WHERE CONTRA_CODE=?");
-      st.setString(1, contraCode);
-      ResultSet rs = st.executeQuery();
-      if(rs.next()){
-        contraName = rs.getString(1);
+          "SELECT CONTRA_NAME FROM CONTRA WHERE CONTRA_CODE=?");
+      stName.setString(1, contraCode);
+      ResultSet rsName = stName.executeQuery();
+      if (rsName.next()) {
+        contraName = rsName.getString(1);
       }
-    }catch(Exception e){ throw new ServletException(e); }
 
-    /* ===== 決定ボタン ===== */
-    if("view".equals(mode)){
-      Map<String, Map<String,Integer>> limitMap = new HashMap<>();
+      /* ===== ② 既存データ削除 ===== */
+      PreparedStatement del =
+        ConnectSQL.getSt(
+          "DELETE FROM DATE_CONTRA " +
+          "WHERE CONTRA_CODE=? " +
+          "AND TO_CHAR(AVAIL_DEL_DATETIME,'YYYY-MM')=?");
 
-      try{
-        PreparedStatement st =
-          ConnectSQL.getSt(
-            "SELECT AVAIL_DEL_DATETIME, MAX_DELIVERY_COUNT " +
-            "FROM DATE_CONTRA WHERE CONTRA_CODE=? " +
-            "AND TO_CHAR(AVAIL_DEL_DATETIME,'YYYY-MM')=?");
+      del.setString(1, contraCode);
+      del.setString(2, ym);
+      del.executeUpdate();
 
-        st.setString(1, contraCode);
-        st.setString(2, year+"-"+String.format("%02d",month));
-        ResultSet rs = st.executeQuery();
+      /* ===== ③ INSERT 準備 ===== */
+      PreparedStatement ins =
+        ConnectSQL.getSt(
+          "INSERT INTO DATE_CONTRA " +
+          "(AVAIL_DEL_DATETIME, CONTRA_CODE, MAX_DELIVERY_COUNT) " +
+          "VALUES (?, ?, ?)");
 
-        while(rs.next()){
-          String dt = rs.getString(1);
-          int cnt = rs.getInt(2);
+      /* ===== ④ パラメータ総なめ ===== */
+      for (Map.Entry<String, String[]> e : req.getParameterMap().entrySet()) {
+        String name = e.getKey();
 
-          String date = dt.substring(0,10);
-          String hh = dt.substring(11,13);
+        if (!name.startsWith("am_") && !name.startsWith("pm_")) continue;
 
-          limitMap.putIfAbsent(date,new HashMap<>());
-          if("09".equals(hh)){
-            limitMap.get(date).put("AM",cnt);
-          }else if("13".equals(hh)){
-            limitMap.get(date).put("PM",cnt);
-          }
-        }
-      }catch(Exception e){ throw new ServletException(e); }
+        String val = e.getValue()[0];
+        if (val == null || val.isEmpty()) continue;
 
-      req.setAttribute("contraCode",contraCode);
-      req.setAttribute("contraName",contraName);
-      req.setAttribute("year",year);
-      req.setAttribute("month",month);
-      req.setAttribute("limitMap",limitMap);
+        String date = name.substring(3); // yyyy-MM-dd
+        String time = name.startsWith("am_")
+                        ? "09:00:00"
+                        : "13:00:00";
 
-      req.getRequestDispatcher("/limitform.jsp").forward(req,res);
-      return;
-    }
+        ins.setString(1, date + " " + time);
+        ins.setString(2, contraCode);
+        ins.setInt(3, Integer.parseInt(val));
+        ins.executeUpdate();
+      }
 
-    /* ===== 登録 ===== */
-    if("save".equals(mode)){
-      try{
-        PreparedStatement del =
-          ConnectSQL.getSt(
-            "DELETE FROM DATE_CONTRA WHERE CONTRA_CODE=? " +
-            "AND TO_CHAR(AVAIL_DEL_DATETIME,'YYYY-MM')=?");
-        del.setString(1,contraCode);
-        del.setString(2,year+"-"+String.format("%02d",month));
-        del.executeUpdate();
+      /* ===== ⑤ 完了画面へ渡す ===== */
+      String targetYm = year + "年" + month + "月";
 
-        PreparedStatement ins =
-          ConnectSQL.getSt(
-            "INSERT INTO DATE_CONTRA VALUES(?,?,?)");
+      req.setAttribute("contraCode", contraCode);
+      req.setAttribute("contraName", contraName);
+      req.setAttribute("targetYm", targetYm);
 
-        for(String name : req.getParameterMap().keySet()){
-          if(name.startsWith("am_") || name.startsWith("pm_")){
-            String val = req.getParameter(name);
-            if(val==null || val.isEmpty()) continue;
+      req.getRequestDispatcher("/limitresult.jsp").forward(req, res);
 
-            String date = name.substring(3);
-            String time = name.startsWith("am_") ? "09:00:00":"13:00:00";
-
-            ins.setString(1, date+" "+time);
-            ins.setString(2, contraCode);
-            ins.setInt(3, Integer.parseInt(val));
-            ins.executeUpdate();
-          }
-        }
-      }catch(Exception e){ throw new ServletException(e); }
-
-      req.getRequestDispatcher("/limit.jsp").forward(req,res);
+    } catch (Exception e) {
+      throw new ServletException(e);
     }
   }
 }
