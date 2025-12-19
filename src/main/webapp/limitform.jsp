@@ -34,21 +34,23 @@ function build(){
     const iso = y + "-" + String(m).padStart(2,'0') + "-" + String(d).padStart(2,'0');
 
     let cls = "";
-    if(dow === 0) cls = "sun";
-    if(dow === 6) cls = "sat";
+    if(dow === 0) cls = "sun"; // 日曜
+    if(dow === 6) cls = "sat"; // 土曜
 
     const tr = document.createElement("tr");
+    if (cls) tr.className = cls;   // ★ ここが重要
+
     tr.innerHTML =
       "<td>" + iso + "</td>" +
       "<td>" + ["日","月","火","水","木","金","土"][dow] + "</td>" +
       "<td><input type='number' name='am_" + iso + "' min='0' value='10'></td>" +
       "<td><input type='number' name='pm_" + iso + "' min='0' value='10'></td>";
 
-
     tbody.appendChild(tr);
   }
 }
 </script>
+
 
 </head>
 
@@ -94,6 +96,7 @@ for(int i = 1; i <= 12; i++){
 </table>
 
 <div class="actions">
+<button type="button" onclick="location.href='index2.html'">戻る</button>
 <button type="submit" name="mode" value="save">登録</button>
 </div>
 
