@@ -36,17 +36,58 @@ public class ApprovalDeliverystatusServlet extends HttpServlet {
 
         List<Map<String, Object>> reservList = new ArrayList<>();
 
+        // 絞り込み用ステータス取得
+        String[] statuses = request.getParameterValues("status");
+        String deliveryDate = request.getParameter("deliveryDate");
+
         try {
             Class.forName(DRIVER_NAME);
             try (Connection con =
-                     DriverManager.getConnection(URL, USER, PASS);
-                 PreparedStatement ps = con.prepareStatement(
-                     "SELECT RESERV_CODE, ORDER_NUM, DELIVERY_DATETIME, " +
-                     "       DEL_COMP_DATE, DEL_STATUS, REMARK " +
-                     "FROM RESERV " +
-                     "WHERE APPROVAL = 'N' " +
-                     "ORDER BY DELIVERY_DATETIME");
-                 ResultSet rs = ps.executeQuery()) {
+                     DriverManager.getConnection(URL, USER, PASS)) {
+
+            	StringBuilder sql = new StringBuilder(
+        		    "SELECT RESERV_CODE, ORDER_NUM, DELIVERY_DATETIME, " +
+        		    "       DEL_COMP_DATE, DEL_STATUS, REMARK " +
+        		    "FROM RESERV " +
+        		    "WHERE APPROVAL = 'N' "
+        		);
+
+        		// ステータス絞り込み（既存）
+        		if (statuses != null && statuses.length > 0) {
+        		    sql.append("AND DEL_STATUS IN (");
+        		    for (int i = 0; i < statuses.length; i++) {
+        		        sql.append("?");
+        		        if (i < statuses.length - 1) {
+        		            sql.append(",");
+        		        }
+        		    }
+        		    sql.append(") ");
+        		}
+
+        		// 予定日絞り込み（★追加）
+        		if (deliveryDate != null && !deliveryDate.isEmpty()) {
+        		    sql.append("AND TRUNC(DELIVERY_DATETIME) = TO_DATE(?, 'YYYY-MM-DD') ");
+        		}
+
+        		sql.append("ORDER BY DELIVERY_DATETIME");
+
+        		PreparedStatement ps = con.prepareStatement(sql.toString());
+
+        		int idx = 1;
+
+        		// ステータス
+        		if (statuses != null && statuses.length > 0) {
+        		    for (String st : statuses) {
+        		        ps.setString(idx++, st);
+        		    }
+        		}
+
+        		// 予定日
+        		if (deliveryDate != null && !deliveryDate.isEmpty()) {
+        		    ps.setString(idx++, deliveryDate);
+        		}
+
+        		ResultSet rs = ps.executeQuery();
 
                 while (rs.next()) {
                     Map<String, Object> row = new HashMap<>();
