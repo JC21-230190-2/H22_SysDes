@@ -64,9 +64,18 @@ h1 {
 </head>
 
 <body>
-<div class="container">
-    <h1>配達サービス管理システム(業者)</h1>
+<% String tes=(String)session.getAttribute("loginUser");%>
 
+
+<!-- 
+contraCodeで業者コードを送信
+
+ -->
+<div class="container">
+    <h1>配達サービス管理システム
+    	<div>(業者:<%=tes%>)</div>
+    </h1>
+	
     <a href="../limitform.jsp" class="menu-button">
         配達上限登録
     </a>
